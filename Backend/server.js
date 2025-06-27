@@ -1,55 +1,61 @@
-require('dotenv').config();
-const express = require('express');
-const mongoose = require('mongoose');
-const cors = require('cors');
-const bcrypt = require('bcrypt');
-const Usuario = require('./models/Usuario');
+import express from 'express';
+import mongoose from 'mongoose';
+import cors from 'cors';
+import bcrypt from 'bcrypt';
+import dotenv from 'dotenv';
+
+import Usuario from './models/Usuario.js';
+
+dotenv.config();
 
 const app = express();
-const PORT = process.env.PORT || 10000;
 
 app.use(cors());
 app.use(express.json());
-app.use(express.static('public'));
 
 // Conexión a MongoDB
-mongoose.connect(process.env.MONGO_URI)
-  .then(() => console.log('✅ Conectado a MongoDB'))
-  .catch(err => console.error('❌ Error de conexión a MongoDB:', err));
+mongoose.connect(process.env.MONGO_URI, {
+  useNewUrlParser: true,
+  useUnifiedTopology: true,
+})
+.then(() => console.log('✅ Conectado a MongoDB'))
+.catch((err) => console.error('❌ Error de conexión a MongoDB:', err));
 
-// Registro
-app.post('/register', async (req, res) => {
-  const { email, password } = req.body;
+// Ruta para registro de usuario
+app.post('/registro', async (req, res) => {
   try {
-    const hash = await bcrypt.hash(password, 10);
-    const nuevoUsuario = new Usuario({ email, password: hash });
-    await nuevoUsuario.save();
-    res.status(201).json({ message: 'Usuario registrado correctamente' });
-  } catch (error) {
-    if(error.code === 11000){
-      res.status(400).json({ error: 'El correo ya está registrado' });
-    } else {
-      res.status(500).json({ error: 'Error en el servidor' });
+    const { nombre, email, password } = req.body;
+
+    if (!nombre || !email || !password) {
+      return res.status(400).json({ error: 'Faltan campos requeridos' });
     }
-  }
-});
 
-// Login
-app.post('/login', async (req, res) => {
-  const { email, password } = req.body;
-  try {
-    const usuario = await Usuario.findOne({ email });
-    if (!usuario) return res.status(400).json({ error: 'Usuario no encontrado' });
+    // Verificar si usuario ya existe
+    const usuarioExistente = await Usuario.findOne({ email });
+    if (usuarioExistente) {
+      return res.status(409).json({ error: 'El email ya está registrado' });
+    }
 
-    const esValido = await bcrypt.compare(password, usuario.password);
-    if (!esValido) return res.status(400).json({ error: 'Contraseña incorrecta' });
+    // Hashear contraseña
+    const saltRounds = 10;
+    const passwordHash = await bcrypt.hash(password, saltRounds);
 
-    res.json({ message: 'Login exitoso' });
+    const nuevoUsuario = new Usuario({
+      nombre,
+      email,
+      password: passwordHash,
+    });
+
+    await nuevoUsuario.save();
+
+    res.status(201).json({ mensaje: 'Usuario registrado correctamente' });
   } catch (error) {
-    res.status(500).json({ error: 'Error en el servidor' });
+    console.error('Error en registro:', error);
+    res.status(500).json({ error: 'Error interno del servidor' });
   }
 });
 
+const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => {
   console.log(`🚀 Servidor corriendo en puerto ${PORT}`);
 });
